@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BeeStation — Monitor de Colmenas · Minijuego</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --panel: #1a1a1a;
+    --panel-2: #242424;
+    --accent: #F5A623;
+    --accent-2: #FFC24A;
+    --green: #22c55e;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --text: #f5f5f5;
+    --muted: #a3a3a3;
+    --border: #333;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: radial-gradient(circle at top, #1f1f1f 0%, #0d0d0d 70%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    text-align: center; padding: 18px 16px;
+    background: linear-gradient(180deg, rgba(245,166,35,0.15), transparent);
+    border-bottom: 2px solid var(--accent);
+  }
+  header h1 { font-size: 2rem; color: var(--accent); text-shadow: 0 0 18px rgba(245,166,35,0.45); letter-spacing: 0.5px; }
+  header p { color: var(--muted); margin-top: 4px; font-size: 0.95rem; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 18px; }
+
+  .hud { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin: 16px 0; }
+  .hud-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 18px; min-width: 130px; text-align: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .hud-card .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  .hud-card .value { font-size: 1.7rem; font-weight: 700; color: var(--accent-2); margin-top: 2px; }
+  .score { color: var(--green); } .bees { color: var(--accent); }
+  .player-card { min-width: 180px; }
+  .player-name { font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-top: 2px; cursor: pointer; }
+  .player-name:hover { text-decoration: underline; }
+
+  .game-area {
+    position: relative; background: radial-gradient(circle at center, #1b2a4a 0%, #0d0d0d 100%);
+    border-radius: 18px; border: 2px solid var(--border);
+    height: 460px; overflow: hidden; margin: 16px 0;
+  }
+  .hive {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 90px;
+    background: linear-gradient(180deg, #92400e, #78350f);
+    clip-path: polygon(10% 100%, 0% 40%, 20% 0%, 80% 0%, 100% 40%, 90% 100%);
+    border: 3px solid var(--accent);
+    box-shadow: 0 0 28px rgba(245,166,35,0.4);
+  }
+  .bee {
+    position: absolute; width: 30px; height: 30px; cursor: pointer;
+    font-size: 26px; line-height: 30px; text-align: center; user-select: none;
+    transition: transform 0.12s; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  }
+  .bee:hover { transform: scale(1.35); }
+  .bee.infected { filter: hue-rotate(100deg) saturate(2.2) brightness(0.9); }
+
+  .sensor-panel {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px; margin: 16px 0;
+  }
+  .sensor {
+    background: var(--panel); border-radius: 12px; padding: 14px;
+    border-left: 4px solid var(--blue);
+  }
+  .sensor h3 { color: var(--accent-2); margin-bottom: 6px; font-size: 0.95rem; }
+  .sensor .reading { font-size: 1.35rem; font-weight: 700; }
+  .sensor .bar { height: 7px; background: #333; border-radius: 4px; margin-top: 8px; overflow: hidden; }
+  .sensor .bar-fill { height: 100%; transition: width 0.35s; border-radius: 4px; }
+
+  .instructions {
+    background: var(--panel); border-radius: 12px; padding: 16px; margin: 16px 0;
+    border: 1px solid var(--border);
+  }
+  .instructions h3 { color: var(--accent); margin-bottom: 8px; }
+  .instructions ul { margin-left: 20px; line-height: 1.7; color: var(--muted); }
+  .instructions li { margin: 4px 0; }
+
+  .controls { text-align: center; margin: 16px 0; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    background: var(--accent); color: #0d0d0d; border: none; padding: 11px 26px;
+    border-radius: 8px; font-size: 1rem; font-weight: 700; cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(245,166,35,0.5); }
+  .btn:active { transform: translateY(0); }
+  .btn.secondary { background: #333; color: var(--text); }
+  .btn.danger { background: var(--red); color: #fff; }
+  .btn.small { padding: 6px 14px; font-size: 0.85rem; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.88);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .overlay.hidden { display: none; }
+  .modal {
+    background: var(--panel); border: 2px solid var(--accent);
+    border-radius: 18px; padding: 32px; text-align: center; max-width: 560px; width: 92%;
+  }
+  .modal h2 { color: var(--accent); margin-bottom: 12px; }
+  .modal p { color: var(--muted); margin-bottom: 16px; line-height: 1.6; }
+  .modal .stats { display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; margin: 12px 0 18px; }
+  .modal .stat { background: var(--panel-2); border-radius: 8px; padding: 8px; }
+  .modal .stat .v { font-size: 1.4rem; font-weight: 700; color: var(--accent-2); }
+  .modal .stat .l { font-size: 0.75rem; color: var(--muted); }
+  .input {
+    width: 100%; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 1rem; margin: 10px 0 16px;
+  }
+  .input:focus { outline: none; border-color: var(--accent); }
+
+  .toast {
+    position: fixed; top: 18px; right: 18px; background: var(--panel);
+    border-left: 4px solid var(--green); padding: 11px 18px; border-radius: 8px;
+    transform: translateX(120%); transition: transform 0.3s; z-index: 50; max-width: 320px;
+  }
+  .toast.show { transform: translateX(0); }
+  .toast.alert { border-left-color: var(--red); }
+
+  .scores-section {
+    background: var(--panel); border-radius: 12px; padding: 18px; margin: 16px 0;
+    border: 1px solid var(--border);
+  }
+  .scores-section h3 { color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .scores-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 10px; margin-bottom: 14px; }
+  .scores-stats .stat { background: var(--panel-2); border-radius: 8px; padding: 10px; text-align: center; }
+  .scores-stats .stat .v { font-size: 1.3rem; font-weight: 700; color: var(--accent-2); }
+  .scores-stats .stat .l { font-size: 0.75rem; color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--accent); font-weight: 600; background: var(--panel-2); position: sticky; top: 0; }
+  tr:hover td { background: rgba(245,166,35,0.05); }
+  .empty { text-align: center; color: var(--muted); padding: 20px; font-style: italic; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge.best { background: var(--accent); color: #0d0d0d; }
+
+  @keyframes pulse { 0%,100% { transform: scale(1);} 50% { transform: scale(1.12);} }
+  .pulse { animation: pulse 0.9s infinite; }
+  footer { text-align: center; padding: 16px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); margin-top: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐝 BeeStation</h1>
+  <p>Monitor Inteligente de Colmenas · Minijuego Interactivo de Presentación · SENA Centro Minero Ambiental</p>
+</header>
+
+<div class="container">
+  <div class="hud">
+    <div class="hud-card player-card">
+      <div class="label">Jugador</div>
+      <div class="player-name" id="playerName" title="Clic para cambiar nombre">—</div>
+    </div>
+    <div class="hud-card"><div class="label">Puntaje</div><div class="value score" id="score">0</div></div>
+    <div class="hud-card"><div class="label">Abejas sanas</div><div class="value bees" id="healthy">0</div></div>
+    <div class="hud-card"><div class="label">Infectadas</div><div class="value" id="infected" style="color:#ef4444">0</div></div>
+    <div class="hud-card"><div class="label">Nivel</div><div class="value" id="level">1</div></div>
+    <div class="hud-card"><div class="label">Tiempo</div><div class="value" id="timer">60</div></div>
+    <div class="hud-card"><div class="label">Mejor puntaje</div><div class="value" id="bestScore">0</div></div>
+  </div>
+
+  <div class="game-area" id="gameArea">
+    <div class="hive"></div>
+  </div>
+
+  <div class="sensor-panel">
+    <div class="sensor" style="border-color:#ef4444">
+      <h3>🌡️ Temp. interna</h3>
+      <div class="reading" id="temp">35.2 °C</div>
+      <div class="bar"><div class="bar-fill" id="tempBar" style="width:60%;background:#ef4444"></div></div>
+    </div>
+    <div class="sensor" style="border-color:#3b82f6">
+      <h3>💧 Humedad</h3>
+      <div class="reading" id="hum">62.0 %</div>
+      <div class="bar"><div class="bar-fill" id="humBar" style="width:62%;background:#3b82f6"></div></div>
+    </div>
+    <div class="sensor" style="border-color:#8b5cf6">
+      <h3>🧭 Presión</h3>
+      <div class="reading" id="pres">1013 hPa</div>
+      <div class="bar"><div class="bar-fill" id="presBar" style="width:70%;background:#8b5cf6"></div></div>
+    </div>
+    <div class="sensor" style="border-color:#22c55e">
+      <h3>⚖️ Peso colmena</h3>
+      <div class="reading" id="weight">12.4 kg</div>
+      <div class="bar"><div class="bar-fill" id="weightBar" style="width:50%;background:#22c55e"></div></div>
+    </div>
+    <div class="sensor" style="border-color:#f59e0b">
+      <h3>🔊 Acústica</h3>
+      <div class="reading" id="sound">420 Hz</div>
+      <div class="bar"><div class="bar-fill" id="soundBar" style="width:42%;background:#f59e0b"></div></div>
+    </div>
+    <div class="sensor" style="border-color:#eab308">
+      <h3>💡 Luminosidad</h3>
+      <div class="reading" id="light">680 lux</div>
+      <div class="bar"><div class="bar-fill" id="lightBar" style="width:68%;background:#eab308"></div></div>
+    </div>
+  </div>
+
+  <div class="instructions">
+    <h3>📋 Cómo jugar</h3>
+    <ul>
+      <li><b>Clic en abejas sanas 🐝</b> para enviarlas a la colmena: <b>+10 pts</b>.</li>
+      <li><b>Evita clic en abejas infectadas 🦠</b> (filtro rojo/verde): <b>−15 pts</b> y suma infectada.</li>
+      <li>Los <b>6 sensores</b> se actualizan en tiempo real simulando datos de BeeStation.</li>
+      <li>Cada 15 s sube el nivel y aparecen más abejas (más rápidas).</li>
+      <li>Duración: <b>60 s</b>. ¡Tu puntaje se guarda con tu nombre en el historial!</li>
+    </ul>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="startBtn">▶ Iniciar Juego</button>
+    <button class="btn secondary" id="resetBtn">↺ Reiniciar</button>
+    <button class="btn secondary" id="exportBtn">⬇ Exportar puntajes</button>
+  </div>
+
+  <!-- Puntajes por partida -->
+  <div class="scores-section">
+    <h3>🏆 Puntajes por partida <span class="badge" id="totalPartidas">0 partidas</span></h3>
+    <div class="scores-stats">
+      <div class="stat"><div class="v" id="statBest">0</div><div class="l">Mejor puntaje</div></div>
+      <div class="stat"><div class="v" id="statAvg">0</div><div class="l">Promedio</div></div>
+      <div class="stat"><div class="v" id="statTotal">0</div><div class="l">Total partidas</div></div>
+      <div class="stat"><div class="v" id="statLevel">1</div><div class="l">Mejor nivel</div></div>
+    </div>
+    <div class="table-wrap">
+      <table id="scoresTable">
+        <thead>
+          <tr>
+            <th>#</th><th>Jugador</th><th>Fecha y hora</th><th>Puntaje</th><th>Sancs</th><th>Infectadas</th><th>Nivel</th><th>Duración</th>
+          </tr>
+        </thead>
+        <tbody id="scoresBody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="scoresEmpty">Aún no hay partidas registradas. ¡Juega tu primera partida!</div>
+    <div class="controls" style="margin-top:12px;">
+      <button class="btn danger small" id="clearBtn">🗑 Limpiar historial</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modalBox">
+    <h2>🐝 Bienvenido a BeeStation</h2>
+    <p>Simulador interactivo del monitor de colmenas. Gestiona las abejas, vigila los 6 sensores y mantén la colmena saludable. Al final de cada partida, tu puntaje se guarda con tu nombre en el historial.</p>
+    <label for="nameInput" style="color:var(--muted);font-size:0.9rem;">Tu nombre para el ranking:</label>
+    <input class="input" id="nameInput" type="text" maxlength="30" placeholder="Ej: María, Equipo SENA..." autocomplete="off">
+    <button class="btn" id="playBtn">Jugar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>BeeStation · SENA Centro Minero Ambiental · El Bagre, Antioquia · Presentación interactiva</footer>
+
+<script>
+  const gameArea = document.getElementById('gameArea');
+  const scoreEl = document.getElementById('score');
+  const healthyEl = document.getElementById('healthy');
+  const infectedEl = document.getElementById('infected');
+  const levelEl = document.getElementById('level');
+  const timerEl = document.getElementById('timer');
+  const bestScoreEl = document.getElementById('bestScore');
+  const toast = document.getElementById('toast');
+
+  const SCORES_KEY = 'beestation_scores_v1';
+  const PLAYER_KEY = 'beestation_player_v1';
+
+  let score = 0, healthy = 0, infectedCount = 0, level = 1;
+  let timeLeft = 60, gameRunning = false, spawnInterval, timerInterval, sensorInterval, moveTimers = [];
+  const bees = [];
+  let partidaInicio = null;
+
+  // ---------- Jugador ----------
+  function getPlayerName() {
+    return localStorage.getItem(PLAYER_KEY) || '';
+  }
+  function setPlayerName(name) {
+    name = (name || '').trim().slice(0,30);
+    if (!name) return false;
+    localStorage.setItem(PLAYER_KEY, name);
+    document.getElementById('playerName').textContent = name;
+    return true;
+  }
+  function askName() {
+    const current = getPlayerName();
+    const input = document.getElementById('nameInput');
+    input.value = current;
+    document.getElementById('overlay').classList.remove('hidden');
+    document.getElementById('modalBox').innerHTML = `
+      <h2>🐝 Bienvenido a BeeStation</h2>
+      <p>Simulador interactivo del monitor de colmenas. Gestiona las abejas, vigila los 6 sensores y mantén la colmena saludable. Tu puntaje se guarda con tu nombre en el historial.</p>
+      <label for="nameInput" style="color:var(--muted);font-size:0.9rem;">Tu nombre para el ranking:</label>
+      <input class="input" id="nameInput" type="text" maxlength="30" placeholder="Ej: María, Equipo SENA..." autocomplete="off" value="${current.replace(/"/g,'&quot;')}">
+      <button class="btn" id="playBtn">Jugar</button>
+    `;
+    const btn = document.getElementById('playBtn');
+    const inp = document.getElementById('nameInput');
+    inp.focus();
+    const submit = () => {
+      if (!setPlayerName(inp.value)) { showToast('Ingresa un nombre válido', true); inp.focus(); return; }
+      startGame();
+    };
+    btn.addEventListener('click', submit);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  }
+
+  // ---------- Puntajes ----------
+  function loadScores() {
+    try { return JSON.parse(localStorage.getItem(SCORES_KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+  function saveScores(arr) { localStorage.setItem(SCORES_KEY, JSON.stringify(arr)); }
+  function renderScores() {
+    const arr = loadScores();
+    const body = document.getElementById('scoresBody');
+    const empty = document.getElementById('scoresEmpty');
+    body.innerHTML = '';
+    if (arr.length === 0) { empty.style.display = 'block'; } else { empty.style.display = 'none'; }
+    const best = arr.length ? Math.max(...arr.map(p=>p.score)) : 0;
+    const ordered = arr.slice().reverse();
+    ordered.forEach((p, i) => {
+      const tr = document.createElement('tr');
+      const isBest = arr.length>1 && p.score === best;
+      tr.innerHTML = `
+        <td>${arr.length - i}</td>
+        <td><b style="color:var(--accent)">${escapeHtml(p.jugador || 'Anónimo')}</b></td>
+        <td>${p.fecha}</td>
+        <td><b style="color:var(--accent-2)">${p.score}</b>${isBest?' <span class="badge best">MEJOR</span>':''}</td>
+        <td>${p.healthy}</td>
+        <td>${p.infected}</td>
+        <td>${p.level}</td>
+        <td>${p.duracion}s</td>
+      `;
+      body.appendChild(tr);
+    });
+    document.getElementById('statBest').textContent = best;
+    const avg = arr.length ? Math.round(arr.reduce((a,b)=>a+b.score,0)/arr.length) : 0;
+    document.getElementById('statAvg').textContent = avg;
+    document.getElementById('statTotal').textContent = arr.length;
+    document.getElementById('statLevel').textContent = arr.length ? Math.max(...arr.map(p=>p.level)) : 1;
+    document.getElementById('totalPartidas').textContent = arr.length + ' partida' + (arr.length===1?'':'s');
+    bestScoreEl.textContent = best;
+  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function recordScore() {
+    const arr = loadScores();
+    const duracion = partidaInicio ? Math.round((Date.now()-partidaInicio)/1000) : 60;
+    arr.push({
+      jugador: getPlayerName() || 'Anónimo',
+      fecha: new Date().toLocaleString('es-CO'),
+      score, healthy, infected: infectedCount, level, duracion
+    });
+    if (arr.length > 50) arr.splice(0, arr.length-50);
+    saveScores(arr);
+    renderScores();
+  }
+
+  function showToast(msg, alert=false) {
+    toast.textContent = msg;
+    toast.classList.toggle('alert', alert);
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.remove('show'), 2000);
+  }
+
+  function spawnBee() {
+    if (!gameRunning) return;
+    const bee = document.createElement('div');
+    bee.className = 'bee';
+    const infected = Math.random() < 0.22 + level*0.06;
+    if (infected) { bee.classList.add('infected'); bee.textContent = '🦠'; }
+    else bee.textContent = '🐝';
+    const x = Math.random() * (gameArea.clientWidth - 40);
+    const y = Math.random() * (gameArea.clientHeight - 130) + 20;
+    bee.style.left = x + 'px';
+    bee.style.top = y + 'px';
+    bee.dataset.infected = infected;
+    gameArea.appendChild(bee);
+    bees.push(bee);
+
+    const move = setInterval(() => {
+      if (!gameRunning || !bee.parentNode) { clearInterval(move); return; }
+      const nx = Math.max(0, Math.min(gameArea.clientWidth-32, parseFloat(bee.style.left)+ (Math.random()-0.5)*70));
+      const ny = Math.max(20, Math.min(gameArea.clientHeight-130, parseFloat(bee.style.top)+ (Math.random()-0.5)*70));
+      bee.style.left = nx + 'px';
+      bee.style.top = ny + 'px';
+    }, 800);
+    moveTimers.push(move);
+
+    bee.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!gameRunning) return;
+      const isInfected = bee.dataset.infected === 'true';
+      if (isInfected) {
+        score = Math.max(0, score - 15);
+        infectedCount++;
+        infectedEl.textContent = infectedCount;
+        showToast('¡Abeja infectada! −15 pts', true);
+      } else {
+        score += 10;
+        healthy++;
+        healthyEl.textContent = healthy;
+        showToast('+10 pts · Abeja a la colmena');
+      }
+      scoreEl.textContent = score;
+      bee.remove();
+      const idx = bees.indexOf(bee); if (idx>-1) bees.splice(idx,1);
+      clearInterval(move);
+    });
+
+    setTimeout(() => {
+      if (bee.parentNode) {
+        bee.remove();
+        const idx = bees.indexOf(bee); if (idx>-1) bees.splice(idx,1);
+        clearInterval(move);
+      }
+    }, 6500);
+  }
+
+  let tBase=35.2, hBase=62, pBase=1013, wBase=12.4, sBase=420, lBase=680;
+  function updateSensors() {
+    tBase += (Math.random()-0.5)*0.4; tBase = Math.max(32, Math.min(39, tBase));
+    hBase += (Math.random()-0.5)*1.5; hBase = Math.max(45, Math.min(80, hBase));
+    pBase += (Math.random()-0.5)*1.2; pBase = Math.max(995, Math.min(1025, pBase));
+    wBase += (Math.random()-0.5)*0.08; wBase = Math.max(10, Math.min(16, wBase));
+    sBase += (Math.random()-0.5)*30; sBase = Math.max(200, Math.min(900, sBase));
+    lBase += (Math.random()-0.5)*40; lBase = Math.max(200, Math.min(1200, lBase));
+
+    const temp = tBase.toFixed(1);
+    const hum = hBase.toFixed(1);
+    const pres = pBase.toFixed(0);
+    const weight = wBase.toFixed(2);
+    const sound = Math.round(sBase);
+    const light = Math.round(lBase);
+
+    document.getElementById('temp').textContent = temp + ' °C';
+    document.getElementById('hum').textContent = hum + ' %';
+    document.getElementById('pres').textContent = pres + ' hPa';
+    document.getElementById('weight').textContent = weight + ' kg';
+    document.getElementById('sound').textContent = sound + ' Hz';
+    document.getElementById('light').textContent = light + ' lux';
+
+    document.getElementById('tempBar').style.width = ((temp-30)/10*100) + '%';
+    document.getElementById('humBar').style.width = (hum/100*100) + '%';
+    document.getElementById('presBar').style.width = ((pres-990)/40*100) + '%';
+    document.getElementById('weightBar').style.width = (weight/18*100) + '%';
+    document.getElementById('soundBar').style.width = (sound/1000*100) + '%';
+    document.getElementById('lightBar').style.width = (light/1300*100) + '%';
+  }
+
+  function startGame() {
+    if (gameRunning) return;
+    gameRunning = true;
+    score=0; healthy=0; infectedCount=0; level=1; timeLeft=60;
+    scoreEl.textContent=0; healthyEl.textContent=0; infectedEl.textContent=0; levelEl.textContent=1; timerEl.textContent=60;
+    bees.forEach(b=>b.remove()); bees.length=0;
+    moveTimers.forEach(clearInterval); moveTimers=[];
+    document.getElementById('overlay').classList.add('hidden');
+    partidaInicio = Date.now();
+    spawnInterval = setInterval(spawnBee, 1100);
+    timerInterval = setInterval(() => {
+      timeLeft--;
+      timerEl.textContent = timeLeft;
+      if (timeLeft % 15 === 0 && timeLeft>0) {
+        level++;
+        levelEl.textContent = level;
+        showToast('¡Nivel ' + level + '!');
+        clearInterval(spawnInterval);
+        spawnInterval = setInterval(spawnBee, Math.max(350, 1100 - level*140));
+      }
+      if (timeLeft <= 0) endGame();
+    }, 1000);
+    sensorInterval = setInterval(updateSensors, 1500);
+    updateSensors();
+  }
+
+  function endGame() {
+    gameRunning = false;
+    clearInterval(spawnInterval); clearInterval(timerInterval); clearInterval(sensorInterval);
+    moveTimers.forEach(clearInterval); moveTimers=[];
+    recordScore();
+    const overlay = document.getElementById('overlay');
+    overlay.classList.remove('hidden');
+    const arr = loadScores();
+    const best = arr.length ? Math.max(...arr.map(p=>p.score)) : 0;
+    overlay.querySelector('#modalBox').innerHTML = `
+      <h2>🏁 ¡Fin de la partida, ${escapeHtml(getPlayerName() || 'jugador')}!</h2>
+      <div class="stats">
+        <div class="stat"><div class="v">${score}</div><div class="l">Puntaje</div></div>
+        <div class="stat"><div class="v">${healthy}</div><div class="l">Abejas sanas</div></div>
+        <div class="stat"><div class="v">${infectedCount}</div><div class="l">Infectadas</div></div>
+        <div class="stat"><div class="v">${level}</div><div class="l">Nivel</div></div>
+      </div>
+      <p>Mejor puntaje histórico: <b style="color:var(--accent)">${best}</b>. Tu partida quedó guardada en el historial.</p>
+      <button class="btn" onclick="startGame()">Jugar de nuevo</button>
+      <button class="btn secondary" onclick="document.getElementById('overlay').classList.add('hidden')">Ver historial</button>
+      <button class="btn secondary small" onclick="askName()">Cambiar nombre</button>
+    `;
+  }
+
+  function resetGame() {
+    gameRunning = false;
+    clearInterval(spawnInterval); clearInterval(timerInterval); clearInterval(sensorInterval);
+    moveTimers.forEach(clearInterval); moveTimers=[];
+    bees.forEach(b=>b.remove()); bees.length=0;
+    score=0; healthy=0; infectedCount=0; level=1; timeLeft=60;
+    scoreEl.textContent=0; healthyEl.textContent=0; infectedEl.textContent=0; levelEl.textContent=1; timerEl.textContent=60;
+    document.getElementById('overlay').classList.remove('hidden');
+    askName();
+  }
+
+  function exportScores() {
+    const arr = loadScores();
+    if (arr.length === 0) { showToast('No hay puntajes para exportar', true); return; }
+    const csv = 'jugador,fecha,puntaje,abejas_sanas,infectadas,nivel,duracion\n' +
+      arr.map(p => `"${(p.jugador||'').replace(/"/g,'""')}","${p.fecha}",${p.score},${p.healthy},${p.infected},${p.level},${p.duracion}`).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'beestation_puntajes.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Puntajes exportados (CSV)');
+  }
+
+  function clearScores() {
+    if (!confirm('¿Borrar todo el historial de puntajes? Esta acción no se puede deshacer.')) return;
+    localStorage.removeItem(SCORES_KEY);
+    renderScores();
+    showToast('Historial borrado');
+  }
+
+  document.getElementById('startBtn').addEventListener('click', () => {
+    if (!getPlayerName()) askName(); else startGame();
+  });
+  document.getElementById('resetBtn').addEventListener('click', resetGame);
+  document.getElementById('exportBtn').addEventListener('click', exportScores);
+  document.getElementById('clearBtn').addEventListener('click', clearScores);
+  document.getElementById('playerName').addEventListener('click', askName);
+
+  // init
+  const pn = getPlayerName();
+  if (pn) document.getElementById('playerName').textContent = pn;
+  else document.getElementById('playerName').textContent = 'Toca para poner nombre';
+  renderScores();
+  // adjuntar listener al boton inicial por si el modal no se reconstruye
+  const initialPlay = document.getElementById('playBtn');
+  if (initialPlay) initialPlay.addEventListener('click', () => {
+    if (!getPlayerName()) askName(); else startGame();
+  });
+  const initialInput = document.getElementById('nameInput');
+  if (initialInput) initialInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { if (!getPlayerName()) { if (!setPlayerName(initialInput.value)) { showToast('Ingresa un nombre válido', true); return; } } startGame(); } });
+  // mostrar modal inicial pidiendo nombre si no hay
+  if (!pn) {
+    askName();
+  } else {
+    document.getElementById('overlay').classList.add('hidden');
+  }
+</script>
+</body>
+</html>
